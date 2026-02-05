@@ -1,0 +1,96 @@
+# Vila Acadia - Docker Ignore File
+# Files and directories to exclude from Docker build context
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.cover
+
+# Environment
+.env
+.env.local
+.env.*.local
+service-account.json
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Frontend (if separate build)
+src/frontend/node_modules/
+src/frontend/dist/
+src/frontend/.next/
+src/frontend/build/
+
+# Logs
+*.log
+logs/
+
+# Database (if any)
+*.db
+*.sqlite
+*.sqlite3
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Railway
+railway.json
+Procfile
+
+# Tests (exclude from production image)
+tests/
+pytest.ini
+test_*.py
+*_test.py
+run_tests.py
+test_quick.bat
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+

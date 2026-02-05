@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # Backend API Service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vila-acadia-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Google Sheets Configuration
+      - GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID}
+      - SERVICE_ACCOUNT_JSON=${SERVICE_ACCOUNT_JSON}
+      
+      # Server Configuration
+      - HOST=0.0.0.0
+      - PORT=8000
+      
+      # Python Configuration
+      - PYTHONUNBUFFERED=1
+    
+    env_file:
+      - .env
+    
+    volumes:
+      # Mount source code for development (comment out for production)
+      - ./src:/app/src:ro
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    networks:
+      - vila-network
+    
+    labels:
+      - "com.vila-acadia.service=backend"
+      - "com.vila-acadia.version=1.0.0"
+
+  # Frontend Service (Optional - if you want to serve frontend via Docker)
+  # Uncomment when frontend is ready for production
+  # frontend:
+  #   build:
+  #     context: ./src/frontend
+  #     dockerfile: Dockerfile
+  #   container_name: vila-acadia-frontend
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3000:80"
+  #   depends_on:
+  #     - backend
+  #   networks:
+  #     - vila-network
+  #   labels:
+  #     - "com.vila-acadia.service=frontend"
+
+networks:
+  vila-network:
+    driver: bridge
+    name: vila-acadia-network
+
+# Volumes for persistent data (if needed in the future)
+# volumes:
+#   app-data:
+#     driver: local
+
