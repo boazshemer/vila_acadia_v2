@@ -134,22 +134,24 @@ async def verify_auth(auth_request: AuthRequest):
     """
     try:
         # Verify credentials against Google Sheets
-        is_valid = gs_service.verify_employee_pin(
+        is_valid, employee_type = gs_service.verify_employee_pin(
             name=auth_request.name,
             pin=auth_request.pin
         )
-        
+
         if is_valid:
             return AuthResponse(
                 success=True,
                 message="Authentication successful",
-                employee_name=auth_request.name
+                employee_name=auth_request.name,
+                employee_type=employee_type
             )
         else:
             return AuthResponse(
                 success=False,
                 message="Invalid credentials. Please check your name and PIN.",
-                employee_name=""
+                employee_name="",
+                employee_type=""
             )
     
     except Exception as e:
@@ -229,27 +231,30 @@ async def submit_hours(request: HoursSubmissionRequest):
                 detail=f"Month is closed for submissions. Cutoff date has passed."
             )
         
-        # Verify employee exists in Settings
+        # Verify employee exists in Settings and get their type
         employees = gs_service.get_employee_settings()
-        employee_exists = any(
-            emp["name"].lower() == request.employee_name.lower() 
-            for emp in employees
+        employee_info = next(
+            (emp for emp in employees if emp["name"].lower() == request.employee_name.lower()),
+            None
         )
-        
-        if not employee_exists:
+
+        if not employee_info:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Employee '{request.employee_name}' not found in Settings"
             )
-        
+
+        employee_type = employee_info.get("type", "E")
+
         # Calculate hours
         hours = gs_service.calculate_hours(request.start_time, request.end_time)
-        
+
         # Submit hours to sheet
         result = gs_service.submit_hours(
             employee_name=request.employee_name,
             date=request.date,
-            hours=hours
+            hours=hours,
+            employee_type=employee_type
         )
         
         return HoursSubmissionResponse(

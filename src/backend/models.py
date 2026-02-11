@@ -25,6 +25,7 @@ class AuthResponse(BaseModel):
     success: bool = Field(..., description="Whether authentication succeeded")
     message: str = Field(..., description="Status message")
     employee_name: str = Field(default="", description="Authenticated employee name")
+    employee_type: str = Field(default="", description="Employee type: 'E' for Employee, 'T' for Team Member")
 
 
 class ManagerAuthRequest(BaseModel):

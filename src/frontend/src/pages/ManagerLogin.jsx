@@ -113,12 +113,6 @@ export default function ManagerLogin() {
             </motion.button>
           </form>
           
-          {/* Demo Info */}
-          <div className="mt-6 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-            <p className="text-xs text-amber-900">
-              <strong>Demo:</strong> Use password <code className="bg-amber-100 px-1 py-0.5 rounded">manager2024</code>
-            </p>
-          </div>
         </div>
       </motion.div>
     </div>

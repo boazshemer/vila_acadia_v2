@@ -244,10 +244,17 @@ export default function ManagerDashboard() {
                           {employee.name.charAt(0)}
                         </span>
                       </div>
-                      <div>
+                      <div className="flex-1">
                         <p className="font-medium text-gray-900">{employee.name}</p>
                         <p className="text-xs text-gray-600">PIN: ••••</p>
                       </div>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        employee.type === 'T'
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {employee.type === 'T' ? 'Team Member' : 'Employee'}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -274,7 +281,7 @@ export default function ManagerDashboard() {
           className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg"
         >
           <p className="text-sm text-amber-900">
-            <strong>How it works:</strong> When you submit daily tips, the system automatically calculates the tip rate per hour and distributes tips among employees based on their submitted hours.
+            <strong>How it works:</strong> When you submit daily tips, the system splits them: 90% for Employees and 10% for Team Members, then calculates per-hour rates within each group.
           </p>
         </motion.div>
       </div>

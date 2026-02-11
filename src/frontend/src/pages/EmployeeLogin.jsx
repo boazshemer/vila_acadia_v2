@@ -14,15 +14,6 @@ export default function EmployeeLogin() {
   });
   const [isLoading, setIsLoading] = useState(false);
   
-  // Common employee names for quick selection
-  const commonNames = [
-    'John Doe',
-    'Jane Smith',
-    'Bob Lee',
-    'Alice Chen',
-    'Charlie Brown',
-  ];
-  
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -45,6 +36,7 @@ export default function EmployeeLogin() {
         toast.success(`Welcome, ${result.employee_name}!`);
         // Store employee name in localStorage
         localStorage.setItem('employeeName', result.employee_name);
+        localStorage.setItem('employeeType', result.employee_type);
         // Navigate to time entry
         navigate('/employee/time-entry');
       } else {
@@ -95,25 +87,16 @@ export default function EmployeeLogin() {
                 <input
                   type="text"
                   id="name"
-                  list="employee-names"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="input pl-10"
-                  placeholder="Type or select your name"
+                  placeholder="Enter your name"
                   autoComplete="off"
                   disabled={isLoading}
                   required
                 />
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <datalist id="employee-names">
-                  {commonNames.map((name) => (
-                    <option key={name} value={name} />
-                  ))}
-                </datalist>
               </div>
-              <p className="mt-1 text-xs text-gray-500">
-                Start typing to search or select from the list
-              </p>
             </div>
             
             {/* PIN Input */}

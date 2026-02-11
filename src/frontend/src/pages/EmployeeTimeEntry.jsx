@@ -79,6 +79,7 @@ export default function EmployeeTimeEntry() {
   
   const handleLogout = () => {
     localStorage.removeItem('employeeName');
+    localStorage.removeItem('employeeType');
     toast.success('Logged out successfully');
     navigate('/');
   };
