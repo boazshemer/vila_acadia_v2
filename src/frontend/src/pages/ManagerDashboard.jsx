@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { DollarSign, Users, LogOut, Calendar, TrendingUp, Shield } from 'lucide-react';
+import { LogOut, Calendar, TrendingUp, Shield } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { managerAPI } from '../services/api';
 import { getCurrentDate } from '../utils/timeCalculator';
@@ -14,8 +14,7 @@ export default function ManagerDashboard() {
     total_tips: '',
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [employees, setEmployees] = useState([]);
-  
+
   useEffect(() => {
     // Check manager auth
     const isAuth = localStorage.getItem('managerAuth');
@@ -24,19 +23,7 @@ export default function ManagerDashboard() {
       navigate('/manager');
       return;
     }
-    
-    // Load employees
-    loadEmployees();
   }, [navigate]);
-  
-  const loadEmployees = async () => {
-    try {
-      const data = await managerAPI.getEmployees();
-      setEmployees(data);
-    } catch (error) {
-      console.error('Failed to load employees:', error);
-    }
-  };
   
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -107,17 +94,17 @@ export default function ManagerDashboard() {
           </button>
         </motion.div>
         
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="max-w-xl mx-auto">
           {/* Daily Tip Input */}
           <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
             <div className="card">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-amber-600" />
+                  <span className="text-xl font-bold text-amber-600">₪</span>
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">
@@ -168,7 +155,7 @@ export default function ManagerDashboard() {
                       disabled={isLoading}
                       required
                     />
-                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-medium">₪</span>
                   </div>
                 </div>
                 
@@ -183,7 +170,7 @@ export default function ManagerDashboard() {
                       Preview
                     </p>
                     <p className="text-2xl font-bold text-amber-900">
-                      ${parseFloat(formData.total_tips).toFixed(2)}
+                      ₪{parseFloat(formData.total_tips).toFixed(2)}
                     </p>
                     <p className="text-xs text-amber-700 mt-1">
                       This will be distributed among employees based on hours worked
@@ -208,67 +195,6 @@ export default function ManagerDashboard() {
                   )}
                 </motion.button>
               </form>
-            </div>
-          </motion.div>
-          
-          {/* Employee List */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <div className="card">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
-                  <Users className="w-6 h-6 text-primary-600" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">
-                    Employee List
-                  </h2>
-                  <p className="text-sm text-gray-600">
-                    Current employees from Settings sheet
-                  </p>
-                </div>
-              </div>
-              
-              {employees.length > 0 ? (
-                <div className="space-y-2">
-                  {employees.map((employee, index) => (
-                    <div
-                      key={index}
-                      className="p-3 bg-gray-50 rounded-lg flex items-center gap-3"
-                    >
-                      <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                        <span className="text-primary-600 font-medium">
-                          {employee.name.charAt(0)}
-                        </span>
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{employee.name}</p>
-                        <p className="text-xs text-gray-600">PIN: ••••</p>
-                      </div>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        employee.type === 'T'
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'bg-blue-100 text-blue-700'
-                      }`}>
-                        {employee.type === 'T' ? 'Team Member' : 'Employee'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-600">
-                    Employee list will appear here
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Employees are managed in the Google Sheets "Settings" tab
-                  </p>
-                </div>
-              )}
             </div>
           </motion.div>
         </div>

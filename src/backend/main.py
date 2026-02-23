@@ -134,7 +134,7 @@ async def verify_auth(auth_request: AuthRequest):
     """
     try:
         # Verify credentials against Google Sheets
-        is_valid, employee_type = gs_service.verify_employee_pin(
+        is_valid, employee_type, canonical_name = gs_service.verify_employee_pin(
             name=auth_request.name,
             pin=auth_request.pin
         )
@@ -143,7 +143,7 @@ async def verify_auth(auth_request: AuthRequest):
             return AuthResponse(
                 success=True,
                 message="Authentication successful",
-                employee_name=auth_request.name,
+                employee_name=canonical_name,
                 employee_type=employee_type
             )
         else:

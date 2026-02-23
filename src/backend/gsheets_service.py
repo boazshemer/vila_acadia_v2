@@ -114,24 +114,25 @@ class GoogleSheetsService:
         except Exception as e:
             raise Exception(f"Error reading employee settings: {str(e)}")
 
-    def verify_employee_pin(self, name: str, pin: str) -> Tuple[bool, str]:
+    def verify_employee_pin(self, name: str, pin: str) -> Tuple[bool, str, str]:
         """
         Verify an employee's PIN against the Settings sheet.
 
         Returns:
-            Tuple of (is_valid, employee_type). employee_type is 'E' or 'T'.
+            Tuple of (is_valid, employee_type, canonical_name).
+            canonical_name is the exact name as stored in the Settings sheet.
         """
         try:
             employees = self.get_employee_settings()
 
             for employee in employees:
                 if employee["name"].lower() == name.lower() and employee["pin"] == pin:
-                    return True, employee.get("type", "E")
+                    return True, employee.get("type", "E"), employee["name"]
 
-            return False, ""
+            return False, "", ""
 
         except Exception:
-            return False, ""
+            return False, "", ""
 
     def get_or_create_month_sheet(self, date: Optional[datetime] = None) -> gspread.Worksheet:
         """
