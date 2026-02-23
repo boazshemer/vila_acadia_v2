@@ -345,63 +345,63 @@ class GoogleSheetsService:
             worksheet.batch_format,
             [
                 # Dashboard labels (hours col rows 2-8) - bold, light green
-                (f'{hl}2:{hl}8', {
+                {"range": f'{hl}2:{hl}8', "format": {
                     "textFormat": {"bold": True},
                     "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
                     "horizontalAlignment": "CENTER"
-                }),
+                }},
                 # Header row (row 9) - bold, light green
-                (f'{hl}{self.HEADER_ROW}:{dl}{self.HEADER_ROW}', {
+                {"range": f'{hl}{self.HEADER_ROW}:{dl}{self.HEADER_ROW}', "format": {
                     "textFormat": {"bold": True},
                     "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
                     "horizontalAlignment": "CENTER"
-                }),
+                }},
                 # Date column row 2 (TOTAL TIP - light orange for manager input)
-                (f'{dl}2', {
+                {"range": f'{dl}2', "format": {
                     "textFormat": {"bold": True},
                     "backgroundColor": {"red": 1.0, "green": 0.85, "blue": 0.7},
                     "horizontalAlignment": "CENTER",
                     "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
-                }),
+                }},
                 # TOTAL TIP E and T values (rows 3-4) - currency
-                (f'{dl}3:{dl}4', {
+                {"range": f'{dl}3:{dl}4', "format": {
                     "textFormat": {"bold": True},
                     "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
                     "horizontalAlignment": "CENTER",
                     "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
-                }),
+                }},
                 # TOTAL HOUR E and T values (rows 5-6) - number
-                (f'{dl}5:{dl}6', {
+                {"range": f'{dl}5:{dl}6', "format": {
                     "textFormat": {"bold": True},
                     "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
                     "horizontalAlignment": "CENTER",
                     "numberFormat": {"type": "NUMBER", "pattern": "0.00"}
-                }),
+                }},
                 # TIP PER HOUR E and T values (rows 7-8) - currency
-                (f'{dl}7:{dl}8', {
+                {"range": f'{dl}7:{dl}8', "format": {
                     "textFormat": {"bold": True},
                     "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
                     "horizontalAlignment": "CENTER",
                     "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
-                }),
+                }},
                 # Hours data column (light yellow + 2 decimals)
-                (f'{hl}{dr}:{hl}{er}', {
+                {"range": f'{hl}{dr}:{hl}{er}', "format": {
                     "backgroundColor": {"red": 1.0, "green": 0.95, "blue": 0.8},
                     "numberFormat": {"type": "NUMBER", "pattern": "0.00"}
-                }),
+                }},
                 # Tips column (currency with shekel)
-                (f'{dl}{dr}:{dl}{er}', {
+                {"range": f'{dl}{dr}:{dl}{er}', "format": {
                     "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
-                }),
+                }},
                 # Right border on date column for visual separation
-                (f'{dl}1:{dl}{er}', {
+                {"range": f'{dl}1:{dl}{er}', "format": {
                     "borders": {
                         "right": {
                             "style": "SOLID_MEDIUM",
                             "color": {"red": 0, "green": 0, "blue": 0}
                         }
                     }
-                }),
+                }},
             ]
         )
 
@@ -474,48 +474,48 @@ class GoogleSheetsService:
             worksheet.batch_format,
             [
                 # Header row 9 - bold, light blue
-                (f'{tl}{self.HEADER_ROW}', {
+                {"range": f'{tl}{self.HEADER_ROW}', "format": {
                     "textFormat": {"bold": True},
                     "backgroundColor": {"red": 0.68, "green": 0.85, "blue": 0.95},
                     "horizontalAlignment": "CENTER"
-                }),
+                }},
                 # Dashboard rows 2-8 - bold, light blue
-                (f'{tl}2:{tl}8', {
+                {"range": f'{tl}2:{tl}8', "format": {
                     "textFormat": {"bold": True},
                     "backgroundColor": {"red": 0.68, "green": 0.85, "blue": 0.95},
                     "horizontalAlignment": "CENTER"
-                }),
+                }},
                 # Row 2 - currency
-                (f'{tl}2', {
+                {"range": f'{tl}2', "format": {
                     "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
-                }),
+                }},
                 # Rows 3-4 - currency
-                (f'{tl}3:{tl}4', {
+                {"range": f'{tl}3:{tl}4', "format": {
                     "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
-                }),
+                }},
                 # Rows 5-6 - number
-                (f'{tl}5:{tl}6', {
+                {"range": f'{tl}5:{tl}6', "format": {
                     "numberFormat": {"type": "NUMBER", "pattern": "0.00"}
-                }),
+                }},
                 # Rows 7-8 - currency
-                (f'{tl}7:{tl}8', {
+                {"range": f'{tl}7:{tl}8', "format": {
                     "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
-                }),
+                }},
                 # Employee data - currency, light blue background
-                (f'{tl}{dr}:{tl}{er}', {
+                {"range": f'{tl}{dr}:{tl}{er}', "format": {
                     "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.97},
                     "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"},
                     "textFormat": {"bold": True}
-                }),
+                }},
                 # Left border for visual separation
-                (f'{tl}1:{tl}{er}', {
+                {"range": f'{tl}1:{tl}{er}', "format": {
                     "borders": {
                         "left": {
                             "style": "SOLID_MEDIUM",
                             "color": {"red": 0, "green": 0, "blue": 0}
                         }
                     }
-                }),
+                }},
             ]
         )
 
