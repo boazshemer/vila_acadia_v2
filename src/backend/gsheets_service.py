@@ -122,17 +122,23 @@ class GoogleSheetsService:
             Tuple of (is_valid, employee_type, canonical_name).
             canonical_name is the exact name as stored in the Settings sheet.
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         try:
             employees = self.get_employee_settings()
+            logger.info(f"Verifying PIN for '{name}', found {len(employees)} employees")
 
             for employee in employees:
                 if employee["name"].lower() == name.lower() and employee["pin"] == pin:
                     return True, employee.get("type", "E"), employee["name"]
 
+            logger.warning(f"No match found for employee '{name}'")
             return False, "", ""
 
-        except Exception:
-            return False, "", ""
+        except Exception as e:
+            logger.error(f"Error verifying employee PIN: {e}", exc_info=True)
+            raise
 
     def get_or_create_month_sheet(self, date: Optional[datetime] = None) -> gspread.Worksheet:
         """
