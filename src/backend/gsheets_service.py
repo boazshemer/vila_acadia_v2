@@ -1,12 +1,17 @@
 """
-Google Sheets Service for Vila Acadia - Version 3
+Google Sheets Service for Vila Acadia - Version 4
 Implements tip distribution with Employee/Team Member split (90/10).
+Uses batch API calls to avoid Google Sheets rate limits.
 """
 import gspread
+import time
+import logging
 from google.oauth2.service_account import Credentials
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime, timedelta
 from .config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class GoogleSheetsService:
@@ -45,6 +50,20 @@ class GoogleSheetsService:
             creds_dict = settings.get_service_account_dict()
             return Credentials.from_service_account_info(creds_dict, scopes=self.SCOPES)
 
+    def _retry_api_call(self, func, *args, **kwargs):
+        """Retry an API call with exponential backoff on rate limit errors (429)."""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except gspread.exceptions.APIError as e:
+                if e.response.status_code == 429 and attempt < max_retries - 1:
+                    wait = (attempt + 1) * 10  # 10s, 20s, 30s
+                    logger.warning(f"Rate limited (429), retrying in {wait}s (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(wait)
+                else:
+                    raise
+
     def connect(self) -> None:
         """Establish connection to Google Sheets."""
         if self._client is None:
@@ -77,9 +96,6 @@ class GoogleSheetsService:
 
     def get_employee_settings(self) -> List[Dict[str, str]]:
         """Fetch employee roster, PINs, and types from the Settings tab."""
-        import logging
-        logger = logging.getLogger(__name__)
-
         try:
             sheet = self.get_spreadsheet()
             settings_worksheet = sheet.worksheet(self.SETTINGS_TAB)
@@ -122,9 +138,6 @@ class GoogleSheetsService:
             Tuple of (is_valid, employee_type, canonical_name).
             canonical_name is the exact name as stored in the Settings sheet.
         """
-        import logging
-        logger = logging.getLogger(__name__)
-
         try:
             employees = self.get_employee_settings()
             logger.info(f"Verifying PIN for '{name}', found {len(employees)} employees")
@@ -141,21 +154,7 @@ class GoogleSheetsService:
             raise
 
     def get_or_create_month_sheet(self, date: Optional[datetime] = None) -> gspread.Worksheet:
-        """
-        Get or create a worksheet for the month.
-
-        Structure:
-        Row 1: Empty
-        Row 2: TOTAL TIP labels + manager input
-        Row 3: TOTAL TIP E (90%)
-        Row 4: TOTAL TIP T (10%)
-        Row 5: TOTAL HOUR E
-        Row 6: TOTAL HOUR T
-        Row 7: TIP PER HOUR E
-        Row 8: TIP PER HOUR T
-        Row 9: Headers (שם העובד, סוג, HOURS, dates)
-        Row 10+: Employee data
-        """
+        """Get or create a worksheet for the month."""
         if date is None:
             date = datetime.now()
 
@@ -187,23 +186,33 @@ class GoogleSheetsService:
         a10_value = worksheet.cell(self.DATA_START_ROW, 1).value
         if not a10_value or a10_value != "1":
             employee_numbers = [[i] for i in range(1, 71)]
-            worksheet.update(
+            self._retry_api_call(
+                worksheet.update,
                 f'A{self.DATA_START_ROW}:A{self.DATA_END_ROW}',
                 employee_numbers,
                 value_input_option='USER_ENTERED'
             )
 
-        # Add headers in row 9
+        # Add headers in row 9 — batch both cells together
         b9_value = worksheet.cell(self.HEADER_ROW, 2).value
         if not b9_value or b9_value != 'שם העובד':
-            worksheet.update_cell(self.HEADER_ROW, 2, 'שם העובד')  # B9
-            worksheet.update_cell(self.HEADER_ROW, self.TYPE_COL, 'סוג')  # C9
+            self._retry_api_call(
+                worksheet.batch_update,
+                [
+                    {'range': f'B{self.HEADER_ROW}', 'values': [['שם העובד']]},
+                    {'range': f'C{self.HEADER_ROW}', 'values': [['סוג']]},
+                ],
+                value_input_option='USER_ENTERED'
+            )
 
-            worksheet.format(f'A{self.HEADER_ROW}:C{self.HEADER_ROW}', {
-                "textFormat": {"bold": True},
-                "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
-                "horizontalAlignment": "CENTER"
-            })
+            self._retry_api_call(
+                worksheet.format,
+                f'A{self.HEADER_ROW}:C{self.HEADER_ROW}', {
+                    "textFormat": {"bold": True},
+                    "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
+                    "horizontalAlignment": "CENTER"
+                }
+            )
 
         # Freeze header row and first 3 columns (A=number, B=name, C=type)
         worksheet.freeze(rows=self.HEADER_ROW, cols=3)
@@ -221,14 +230,6 @@ class GoogleSheetsService:
         """
         Get or create row for a specific employee.
         Employees start from row 10. Names in column B, types in column C.
-
-        Args:
-            employee_name: Employee name
-            worksheet: Worksheet to search
-            employee_type: 'E' for Employee, 'T' for Team Member
-
-        Returns:
-            Row index (1-based, starting from DATA_START_ROW)
         """
         col_b = worksheet.col_values(2)  # Column B
 
@@ -244,8 +245,15 @@ class GoogleSheetsService:
         if next_row > self.DATA_END_ROW:
             raise ValueError("Maximum number of employees (70) reached")
 
-        worksheet.update_cell(next_row, 2, employee_name)  # Column B = name
-        worksheet.update_cell(next_row, self.TYPE_COL, employee_type)  # Column C = type
+        # Batch: write name + type in one call
+        self._retry_api_call(
+            worksheet.batch_update,
+            [
+                {'range': f'B{next_row}', 'values': [[employee_name]]},
+                {'range': f'C{next_row}', 'values': [[employee_type]]},
+            ],
+            value_input_option='USER_ENTERED'
+        )
         return next_row
 
     def get_or_create_date_column(self, date: str, worksheet: gspread.Worksheet) -> Tuple[int, bool]:
@@ -255,15 +263,6 @@ class GoogleSheetsService:
         Each date gets 2 columns:
         - Hours column: labels (rows 2-8), "HOURS" header (row 9), hours data (rows 10-79)
         - Date column: formulas (rows 2-8), date (row 9), tip formulas (rows 10-79)
-
-        Dashboard rows:
-        Row 2: TOTAL TIP / [manager input]
-        Row 3: TOTAL TIP E / =value*0.9
-        Row 4: TOTAL TIP T / =value*0.1
-        Row 5: TOTAL HOUR E / SUMPRODUCT for E
-        Row 6: TOTAL HOUR T / SUMPRODUCT for T
-        Row 7: TIP PER HOUR E / division with IF
-        Row 8: TIP PER HOUR T / division with IF
         """
         date_obj = datetime.strptime(date, "%Y-%m-%d")
         date_formatted = date_obj.strftime("%d/%m/%Y")
@@ -299,7 +298,7 @@ class GoogleSheetsService:
         dr = self.DATA_START_ROW  # 10
         er = self.DATA_END_ROW    # 79
 
-        # === HOURS COLUMN: Labels in rows 2-8, "HOURS" in row 9 ===
+        # === BUILD ALL DATA IN ONE BATCH ===
         labels = [
             ['TOTAL TIP'],
             ['TOTAL TIP E'],
@@ -309,26 +308,9 @@ class GoogleSheetsService:
             ['TIP PER HOUR E'],
             ['TIP PER HOUR T'],
         ]
-        worksheet.update(f'{hl}2:{hl}8', labels, value_input_option='USER_ENTERED')
-        worksheet.update_cell(self.HEADER_ROW, hours_col, 'HOURS')
 
-        # Clear stale data in hours column rows 10-79
-        # (needed when overwriting the TOTAL MONTHLY TIPS column position)
         empty_cells = [[''] for _ in range(dr, er + 1)]
-        worksheet.update(
-            f'{hl}{dr}:{hl}{er}',
-            empty_cells,
-            value_input_option='USER_ENTERED'
-        )
 
-        # === DATE COLUMN: Formulas in rows 3-8, date in row 9 ===
-        # Row 2: Empty (manager inputs TOTAL TIP here)
-        # Row 3: TOTAL TIP E = 90% of total tip
-        # Row 4: TOTAL TIP T = 10% of total tip
-        # Row 5: TOTAL HOUR E = sum of hours for E employees only
-        # Row 6: TOTAL HOUR T = sum of hours for T employees only
-        # Row 7: TIP PER HOUR E = TOTAL TIP E / TOTAL HOUR E
-        # Row 8: TIP PER HOUR T = TOTAL TIP T / TOTAL HOUR T
         formulas_batch = [
             [f'={dl}2*{self.EMPLOYEE_TIP_SHARE}'],
             [f'={dl}2*{self.TEAM_MEMBER_TIP_SHARE}'],
@@ -337,95 +319,93 @@ class GoogleSheetsService:
             [f'=IF({dl}5>0,{dl}3/{dl}5,0)'],
             [f'=IF({dl}6>0,{dl}4/{dl}6,0)'],
         ]
-        worksheet.update(f'{dl}3:{dl}8', formulas_batch, value_input_option='USER_ENTERED')
-        worksheet.update_cell(self.HEADER_ROW, date_col, date_formatted)
 
-        # === FORMATTING ===
-
-        # Format all dashboard labels (hours col rows 2-8) - bold, light green
-        worksheet.format(f'{hl}2:{hl}8', {
-            "textFormat": {"bold": True},
-            "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
-            "horizontalAlignment": "CENTER"
-        })
-
-        # Format header row (row 9) - bold, light green
-        worksheet.format(f'{hl}{self.HEADER_ROW}:{dl}{self.HEADER_ROW}', {
-            "textFormat": {"bold": True},
-            "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
-            "horizontalAlignment": "CENTER"
-        })
-
-        # Format date column row 2 (TOTAL TIP value - light orange for manager input)
-        worksheet.format(f'{dl}2', {
-            "textFormat": {"bold": True},
-            "backgroundColor": {"red": 1.0, "green": 0.85, "blue": 0.7},
-            "horizontalAlignment": "CENTER",
-            "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
-        })
-
-        # Format TOTAL TIP E and T values (rows 3-4) - currency
-        worksheet.format(f'{dl}3:{dl}4', {
-            "textFormat": {"bold": True},
-            "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
-            "horizontalAlignment": "CENTER",
-            "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
-        })
-
-        # Format TOTAL HOUR E and T values (rows 5-6) - number
-        worksheet.format(f'{dl}5:{dl}6', {
-            "textFormat": {"bold": True},
-            "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
-            "horizontalAlignment": "CENTER",
-            "numberFormat": {"type": "NUMBER", "pattern": "0.00"}
-        })
-
-        # Format TIP PER HOUR E and T values (rows 7-8) - currency
-        worksheet.format(f'{dl}7:{dl}8', {
-            "textFormat": {"bold": True},
-            "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
-            "horizontalAlignment": "CENTER",
-            "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
-        })
-
-        # Format hours data column (light yellow background + 2 decimals)
-        worksheet.format(f'{hl}{dr}:{hl}{er}', {
-            "backgroundColor": {"red": 1.0, "green": 0.95, "blue": 0.8},
-            "numberFormat": {"type": "NUMBER", "pattern": "0.00"}
-        })
-
-        # === EMPLOYEE TIP FORMULAS (rows 10-79) ===
-        # If type is E: hours * TIP_PER_HOUR_E (row 7)
-        # If type is T: hours * TIP_PER_HOUR_T (row 8)
-        # Otherwise: 0
         tip_formulas = []
         for row in range(dr, er + 1):
             tip_formulas.append([
                 f'=IF($C{row}="E",{hl}{row}*${dl}$7,IF($C{row}="T",{hl}{row}*${dl}$8,0))'
             ])
 
-        worksheet.update(
-            f'{dl}{dr}:{dl}{er}',
-            tip_formulas,
+        # ONE batch_update call for ALL data (was 6 separate calls)
+        self._retry_api_call(
+            worksheet.batch_update,
+            [
+                {'range': f'{hl}2:{hl}8', 'values': labels},
+                {'range': f'{hl}{self.HEADER_ROW}', 'values': [['HOURS']]},
+                {'range': f'{hl}{dr}:{hl}{er}', 'values': empty_cells},
+                {'range': f'{dl}3:{dl}8', 'values': formulas_batch},
+                {'range': f'{dl}{self.HEADER_ROW}', 'values': [[date_formatted]]},
+                {'range': f'{dl}{dr}:{dl}{er}', 'values': tip_formulas},
+            ],
             value_input_option='USER_ENTERED'
         )
 
-        # Format tips column (currency with shekel symbol)
-        worksheet.format(f'{dl}{dr}:{dl}{er}', {
-            "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
-        })
+        # ONE batch_format call for ALL formatting (was 9 separate calls)
+        self._retry_api_call(
+            worksheet.batch_format,
+            [
+                # Dashboard labels (hours col rows 2-8) - bold, light green
+                (f'{hl}2:{hl}8', {
+                    "textFormat": {"bold": True},
+                    "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
+                    "horizontalAlignment": "CENTER"
+                }),
+                # Header row (row 9) - bold, light green
+                (f'{hl}{self.HEADER_ROW}:{dl}{self.HEADER_ROW}', {
+                    "textFormat": {"bold": True},
+                    "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
+                    "horizontalAlignment": "CENTER"
+                }),
+                # Date column row 2 (TOTAL TIP - light orange for manager input)
+                (f'{dl}2', {
+                    "textFormat": {"bold": True},
+                    "backgroundColor": {"red": 1.0, "green": 0.85, "blue": 0.7},
+                    "horizontalAlignment": "CENTER",
+                    "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
+                }),
+                # TOTAL TIP E and T values (rows 3-4) - currency
+                (f'{dl}3:{dl}4', {
+                    "textFormat": {"bold": True},
+                    "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
+                    "horizontalAlignment": "CENTER",
+                    "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
+                }),
+                # TOTAL HOUR E and T values (rows 5-6) - number
+                (f'{dl}5:{dl}6', {
+                    "textFormat": {"bold": True},
+                    "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
+                    "horizontalAlignment": "CENTER",
+                    "numberFormat": {"type": "NUMBER", "pattern": "0.00"}
+                }),
+                # TIP PER HOUR E and T values (rows 7-8) - currency
+                (f'{dl}7:{dl}8', {
+                    "textFormat": {"bold": True},
+                    "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.83},
+                    "horizontalAlignment": "CENTER",
+                    "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
+                }),
+                # Hours data column (light yellow + 2 decimals)
+                (f'{hl}{dr}:{hl}{er}', {
+                    "backgroundColor": {"red": 1.0, "green": 0.95, "blue": 0.8},
+                    "numberFormat": {"type": "NUMBER", "pattern": "0.00"}
+                }),
+                # Tips column (currency with shekel)
+                (f'{dl}{dr}:{dl}{er}', {
+                    "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
+                }),
+                # Right border on date column for visual separation
+                (f'{dl}1:{dl}{er}', {
+                    "borders": {
+                        "right": {
+                            "style": "SOLID_MEDIUM",
+                            "color": {"red": 0, "green": 0, "blue": 0}
+                        }
+                    }
+                }),
+            ]
+        )
 
-        # Add right border to date column for visual separation
-        worksheet.format(f'{dl}1:{dl}{er}', {
-            "borders": {
-                "right": {
-                    "style": "SOLID_MEDIUM",
-                    "color": {"red": 0, "green": 0, "blue": 0}
-                }
-            }
-        })
-
-        # Update or create the TOTAL MONTHLY TIPS column at the rightmost position
+        # Update or create the TOTAL MONTHLY TIPS column
         self._update_total_monthly_column(worksheet)
 
         return hours_col, True
@@ -434,8 +414,6 @@ class GoogleSheetsService:
         """
         Create or update the TOTAL MONTHLY TIPS summary column.
         Always placed as the rightmost column, summing all tip values per employee.
-        Uses explicit column references (=E2+G2+...) to avoid SUMPRODUCT errors
-        with text values in HOURS columns.
         """
         row9 = worksheet.row_values(self.HEADER_ROW)
         if not row9:
@@ -460,15 +438,9 @@ class GoogleSheetsService:
         # Get column letters for all DATE columns (E, G, I, ...)
         date_col_letters = [self._col_index_to_letter(c) for c in date_col_indices]
 
-        # Row 9: Header
-        worksheet.update_cell(self.HEADER_ROW, total_col, self.TOTAL_MONTHLY_HEADER)
-
-        # Dashboard rows 2-8 using explicit references
-        # Row 2: sum of all daily total tips (e.g. =E2+G2+I2)
+        # Build formulas
         sum_row2 = '+'.join(f'{dc}2' for dc in date_col_letters)
-        # Row 5: sum of all daily TOTAL HOUR E
         sum_row5 = '+'.join(f'{dc}5' for dc in date_col_letters)
-        # Row 6: sum of all daily TOTAL HOUR T
         sum_row6 = '+'.join(f'{dc}6' for dc in date_col_letters)
 
         dashboard_formulas = [
@@ -480,71 +452,72 @@ class GoogleSheetsService:
             [''],
             [''],
         ]
-        worksheet.update(f'{tl}2:{tl}8', dashboard_formulas, value_input_option='USER_ENTERED')
 
-        # Employee rows 10-79: sum all tip values from DATE columns
         tip_sum_formulas = []
         for row in range(dr, er + 1):
             sum_refs = '+'.join(f'{dc}{row}' for dc in date_col_letters)
             tip_sum_formulas.append([f'={sum_refs}'])
-        worksheet.update(
-            f'{tl}{dr}:{tl}{er}',
-            tip_sum_formulas,
+
+        # ONE batch_update for ALL data (was 3 separate calls)
+        self._retry_api_call(
+            worksheet.batch_update,
+            [
+                {'range': f'{tl}{self.HEADER_ROW}', 'values': [[self.TOTAL_MONTHLY_HEADER]]},
+                {'range': f'{tl}2:{tl}8', 'values': dashboard_formulas},
+                {'range': f'{tl}{dr}:{tl}{er}', 'values': tip_sum_formulas},
+            ],
             value_input_option='USER_ENTERED'
         )
 
-        # === FORMATTING ===
-
-        # Header row 9 - bold, light blue
-        worksheet.format(f'{tl}{self.HEADER_ROW}', {
-            "textFormat": {"bold": True},
-            "backgroundColor": {"red": 0.68, "green": 0.85, "blue": 0.95},
-            "horizontalAlignment": "CENTER"
-        })
-
-        # Dashboard rows 2-8 - bold, light blue
-        worksheet.format(f'{tl}2:{tl}8', {
-            "textFormat": {"bold": True},
-            "backgroundColor": {"red": 0.68, "green": 0.85, "blue": 0.95},
-            "horizontalAlignment": "CENTER"
-        })
-
-        # Row 2 - currency
-        worksheet.format(f'{tl}2', {
-            "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
-        })
-
-        # Rows 3-4 - currency
-        worksheet.format(f'{tl}3:{tl}4', {
-            "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
-        })
-
-        # Rows 5-6 - number
-        worksheet.format(f'{tl}5:{tl}6', {
-            "numberFormat": {"type": "NUMBER", "pattern": "0.00"}
-        })
-
-        # Rows 7-8 - currency
-        worksheet.format(f'{tl}7:{tl}8', {
-            "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
-        })
-
-        # Employee data - currency, light blue background
-        worksheet.format(f'{tl}{dr}:{tl}{er}', {
-            "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.97},
-            "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"},
-            "textFormat": {"bold": True}
-        })
-
-        # Left border for visual separation
-        worksheet.format(f'{tl}1:{tl}{er}', {
-            "borders": {
-                "left": {
-                    "style": "SOLID_MEDIUM",
-                    "color": {"red": 0, "green": 0, "blue": 0}
-                }
-            }
-        })
+        # ONE batch_format for ALL formatting (was 8 separate calls)
+        self._retry_api_call(
+            worksheet.batch_format,
+            [
+                # Header row 9 - bold, light blue
+                (f'{tl}{self.HEADER_ROW}', {
+                    "textFormat": {"bold": True},
+                    "backgroundColor": {"red": 0.68, "green": 0.85, "blue": 0.95},
+                    "horizontalAlignment": "CENTER"
+                }),
+                # Dashboard rows 2-8 - bold, light blue
+                (f'{tl}2:{tl}8', {
+                    "textFormat": {"bold": True},
+                    "backgroundColor": {"red": 0.68, "green": 0.85, "blue": 0.95},
+                    "horizontalAlignment": "CENTER"
+                }),
+                # Row 2 - currency
+                (f'{tl}2', {
+                    "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
+                }),
+                # Rows 3-4 - currency
+                (f'{tl}3:{tl}4', {
+                    "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
+                }),
+                # Rows 5-6 - number
+                (f'{tl}5:{tl}6', {
+                    "numberFormat": {"type": "NUMBER", "pattern": "0.00"}
+                }),
+                # Rows 7-8 - currency
+                (f'{tl}7:{tl}8', {
+                    "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"}
+                }),
+                # Employee data - currency, light blue background
+                (f'{tl}{dr}:{tl}{er}', {
+                    "backgroundColor": {"red": 0.85, "green": 0.92, "blue": 0.97},
+                    "numberFormat": {"type": "CURRENCY", "pattern": "#,##0 \u20AA"},
+                    "textFormat": {"bold": True}
+                }),
+                # Left border for visual separation
+                (f'{tl}1:{tl}{er}', {
+                    "borders": {
+                        "left": {
+                            "style": "SOLID_MEDIUM",
+                            "color": {"red": 0, "green": 0, "blue": 0}
+                        }
+                    }
+                }),
+            ]
+        )
 
     def calculate_hours(self, start_time: str, end_time: str) -> float:
         """Calculate hours worked from start and end time."""
@@ -564,15 +537,7 @@ class GoogleSheetsService:
         return round(hours, 2)
 
     def submit_hours(self, employee_name: str, date: str, hours: float, employee_type: str = "E") -> Dict[str, any]:
-        """
-        Submit hours worked for an employee on a specific date.
-
-        Args:
-            employee_name: Employee name
-            date: Date in YYYY-MM-DD format
-            hours: Hours worked
-            employee_type: 'E' for Employee, 'T' for Team Member
-        """
+        """Submit hours worked for an employee on a specific date."""
         date_obj = datetime.strptime(date, "%Y-%m-%d")
         worksheet = self.get_or_create_month_sheet(date_obj)
 
@@ -584,7 +549,7 @@ class GoogleSheetsService:
         if existing_value and str(existing_value).strip():
             raise Exception(f"Hours already submitted for {employee_name} on {date_obj.strftime('%d/%m/%Y')}. Manual manager approval required for duplicate entry.")
 
-        worksheet.update_cell(employee_row, hours_col, hours)
+        self._retry_api_call(worksheet.update_cell, employee_row, hours_col, hours)
 
         return {
             "success": True,
@@ -621,7 +586,7 @@ class GoogleSheetsService:
         date_col = hours_col + 1
 
         # Write total tips to row 2 of the DATE column
-        worksheet.update_cell(2, date_col, total_tips)
+        self._retry_api_call(worksheet.update_cell, 2, date_col, total_tips)
 
         # Count employees (from column B, starting from DATA_START_ROW)
         col_b = worksheet.col_values(2)
