@@ -1,6 +1,7 @@
 """
 Google Sheets Service for Vila Acadia - Version 4
-Implements tip distribution with Employee/Team Member split (90/10).
+Implements tip distribution with dynamic Employee/Team Member split.
+When only 1 Team Member works: 95/5 split. When 2+ Team Members work: 90/10 split.
 Uses batch API calls to avoid Google Sheets rate limits.
 """
 import gspread
@@ -25,9 +26,11 @@ class GoogleSheetsService:
     # Sheet configuration
     SETTINGS_TAB = "Settings"
 
-    # Tip split configuration
-    EMPLOYEE_TIP_SHARE = 0.9   # 90% for Employees
-    TEAM_MEMBER_TIP_SHARE = 0.1  # 10% for Team Members
+    # Tip split configuration (dynamic: 95/5 when 1 T member, 90/10 when 2+)
+    EMPLOYEE_TIP_SHARE_SINGLE_T = 0.95    # 95% for Employees (when 1 T works)
+    TEAM_MEMBER_TIP_SHARE_SINGLE_T = 0.05  # 5% for Team Members (when 1 T works)
+    EMPLOYEE_TIP_SHARE_MULTI_T = 0.9      # 90% for Employees (when 2+ T work)
+    TEAM_MEMBER_TIP_SHARE_MULTI_T = 0.1   # 10% for Team Members (when 2+ T work)
 
     # Sheet layout constants
     HEADER_ROW = 9        # Row for column headers (שם העובד, סוג, HOURS, date)
@@ -311,9 +314,14 @@ class GoogleSheetsService:
 
         empty_cells = [[''] for _ in range(dr, er + 1)]
 
+        # Count T-type employees with hours > 0 for this date
+        t_count = f'COUNTIFS($C${dr}:$C${er},"T",{hl}{dr}:{hl}{er},">0")'
+
         formulas_batch = [
-            [f'={dl}2*{self.EMPLOYEE_TIP_SHARE}'],
-            [f'={dl}2*{self.TEAM_MEMBER_TIP_SHARE}'],
+            # Row 3: TOTAL TIP E — 95% if <=1 T member works, else 90%
+            [f'=IF({t_count}<=1,{dl}2*{self.EMPLOYEE_TIP_SHARE_SINGLE_T},{dl}2*{self.EMPLOYEE_TIP_SHARE_MULTI_T})'],
+            # Row 4: TOTAL TIP T — 5% if <=1 T member works, else 10%
+            [f'=IF({t_count}<=1,{dl}2*{self.TEAM_MEMBER_TIP_SHARE_SINGLE_T},{dl}2*{self.TEAM_MEMBER_TIP_SHARE_MULTI_T})'],
             [f'=SUMPRODUCT(($C${dr}:$C${er}="E")*({hl}{dr}:{hl}{er}))'],
             [f'=SUMPRODUCT(($C${dr}:$C${er}="T")*({hl}{dr}:{hl}{er}))'],
             [f'=IF({dl}5>0,{dl}3/{dl}5,0)'],
@@ -438,15 +446,17 @@ class GoogleSheetsService:
         # Get column letters for all DATE columns (E, G, I, ...)
         date_col_letters = [self._col_index_to_letter(c) for c in date_col_indices]
 
-        # Build formulas
+        # Build formulas — rows 3-4 SUM daily values (each day has its own dynamic split)
         sum_row2 = '+'.join(f'{dc}2' for dc in date_col_letters)
+        sum_row3 = '+'.join(f'{dc}3' for dc in date_col_letters)
+        sum_row4 = '+'.join(f'{dc}4' for dc in date_col_letters)
         sum_row5 = '+'.join(f'{dc}5' for dc in date_col_letters)
         sum_row6 = '+'.join(f'{dc}6' for dc in date_col_letters)
 
         dashboard_formulas = [
             [f'={sum_row2}'],
-            [f'={tl}2*{self.EMPLOYEE_TIP_SHARE}'],
-            [f'={tl}2*{self.TEAM_MEMBER_TIP_SHARE}'],
+            [f'={sum_row3}'],
+            [f'={sum_row4}'],
             [f'={sum_row5}'],
             [f'={sum_row6}'],
             [''],
@@ -577,7 +587,8 @@ class GoogleSheetsService:
         """
         Submit total daily tips (manager function).
         Writes total_tips to row 2 of the date's values column.
-        All formulas automatically recalculate the 90/10 split.
+        All formulas automatically recalculate the dynamic tip split
+        (95/5 when 1 T member works, 90/10 when 2+ T members work).
         """
         date_obj = datetime.strptime(date, "%Y-%m-%d")
         worksheet = self.get_or_create_month_sheet(date_obj)

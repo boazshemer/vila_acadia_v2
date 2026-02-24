@@ -207,7 +207,7 @@ export default function ManagerDashboard() {
           className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg"
         >
           <p className="text-sm text-amber-900">
-            <strong>How it works:</strong> When you submit daily tips, the system splits them: 90% for Employees and 10% for Team Members, then calculates per-hour rates within each group.
+            <strong>How it works:</strong> When you submit daily tips, the system splits them based on how many Team Members worked that day. If only 1 Team Member worked: 95% goes to Employees and 5% to the Team Member. If 2 or more Team Members worked: 90% goes to Employees and 10% to Team Members. Tip rates are calculated per hour within each group.
           </p>
         </motion.div>
       </div>
