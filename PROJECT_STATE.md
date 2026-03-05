@@ -22,6 +22,7 @@
     - [x] Read-before-Write safety guards
     - [x] [cite_start]Dynamic Column/Date Creation [cite: 26]
     - [x] [cite_start]Automated Formula Injection ($H, R$) [cite: 27, 36]
+    - [x] Dynamic tip split: 100%/0% (0 T members), 95%/5% (1 T member), 90%/10% (2+ T members)
 
 ## Current Status
 - **Current Phase:** Phase 3 - Frontend Development ✅ COMPLETED

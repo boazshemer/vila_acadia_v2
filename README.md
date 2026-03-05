@@ -7,7 +7,7 @@ A modern timesheet management system using FastAPI and Google Sheets as a databa
 Vila Acadia is a web-based timesheet system that allows employees to:
 - Clock in/out using a 4-digit PIN
 - Track hours worked and tips collected
-- Automatically calculate tip distribution based on hours worked
+- Automatically calculate tip distribution based on hours worked (dynamic split: 100%/0% with no Team Members, 95%/5% with 1 Team Member, 90%/10% with 2+ Team Members)
 
 ## 🏗️ Architecture
 

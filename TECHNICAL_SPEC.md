@@ -13,6 +13,17 @@
 - **Tip per Hour ($R$):** $$R = \frac{T}{H}$$
 - **Employee Payout ($P_i$):** $$P_{i} = h_{i} \times R$$
 
+### Dynamic Tip Split
+The tip distribution between Employees (E) and Team Members (T) is determined by how many T-type employees submitted hours for that day:
+
+| T members working | Employee share | Team Member share |
+|-------------------|---------------|-------------------|
+| 0                 | 100%          | 0%                |
+| 1                 | 95%           | 5%                |
+| 2+                | 90%           | 10%               |
+
+Implemented as nested `IF`/`COUNTIFS` Google Sheets formulas (rows 3-4 in each daily column), recalculating automatically when employees submit or change hours.
+
 ### Security & Integrity
 - [cite_start]**Authentication:** Users verify via 4-digit PIN stored in the "Settings" tab[cite: 11, 23].
 - [cite_start]**Race Condition Prevention:** Implementation of "Check-then-Write" logic to ensure single-column creation per date[cite: 33].
