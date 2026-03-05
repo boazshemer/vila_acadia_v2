@@ -1,7 +1,7 @@
 """
 Google Sheets Service for Vila Acadia - Version 4
 Implements tip distribution with dynamic Employee/Team Member split.
-When only 1 Team Member works: 95/5 split. When 2+ Team Members work: 90/10 split.
+When 0 Team Members work: 100/0 split. When 1 Team Member works: 95/5 split. When 2+ Team Members work: 90/10 split.
 Uses batch API calls to avoid Google Sheets rate limits.
 """
 import gspread
@@ -26,7 +26,9 @@ class GoogleSheetsService:
     # Sheet configuration
     SETTINGS_TAB = "Settings"
 
-    # Tip split configuration (dynamic: 95/5 when 1 T member, 90/10 when 2+)
+    # Tip split configuration (dynamic: 100/0 when 0 T members, 95/5 when 1 T member, 90/10 when 2+)
+    EMPLOYEE_TIP_SHARE_ZERO_T = 1.0        # 100% for Employees (when 0 T work)
+    TEAM_MEMBER_TIP_SHARE_ZERO_T = 0.0     # 0% for Team Members (when 0 T work)
     EMPLOYEE_TIP_SHARE_SINGLE_T = 0.95    # 95% for Employees (when 1 T works)
     TEAM_MEMBER_TIP_SHARE_SINGLE_T = 0.05  # 5% for Team Members (when 1 T works)
     EMPLOYEE_TIP_SHARE_MULTI_T = 0.9      # 90% for Employees (when 2+ T work)
@@ -318,10 +320,10 @@ class GoogleSheetsService:
         t_count = f'COUNTIFS($C${dr}:$C${er},"T",{hl}{dr}:{hl}{er},">0")'
 
         formulas_batch = [
-            # Row 3: TOTAL TIP E — 95% if <=1 T member works, else 90%
-            [f'=IF({t_count}<=1,{dl}2*{self.EMPLOYEE_TIP_SHARE_SINGLE_T},{dl}2*{self.EMPLOYEE_TIP_SHARE_MULTI_T})'],
-            # Row 4: TOTAL TIP T — 5% if <=1 T member works, else 10%
-            [f'=IF({t_count}<=1,{dl}2*{self.TEAM_MEMBER_TIP_SHARE_SINGLE_T},{dl}2*{self.TEAM_MEMBER_TIP_SHARE_MULTI_T})'],
+            # Row 3: TOTAL TIP E — 100% if 0 T work, 95% if 1 T works, 90% if 2+ T work
+            [f'=IF({t_count}=0,{dl}2*{self.EMPLOYEE_TIP_SHARE_ZERO_T},IF({t_count}=1,{dl}2*{self.EMPLOYEE_TIP_SHARE_SINGLE_T},{dl}2*{self.EMPLOYEE_TIP_SHARE_MULTI_T}))'],
+            # Row 4: TOTAL TIP T — 0% if 0 T work, 5% if 1 T works, 10% if 2+ T work
+            [f'=IF({t_count}=0,{dl}2*{self.TEAM_MEMBER_TIP_SHARE_ZERO_T},IF({t_count}=1,{dl}2*{self.TEAM_MEMBER_TIP_SHARE_SINGLE_T},{dl}2*{self.TEAM_MEMBER_TIP_SHARE_MULTI_T}))'],
             [f'=SUMPRODUCT(($C${dr}:$C${er}="E")*({hl}{dr}:{hl}{er}))'],
             [f'=SUMPRODUCT(($C${dr}:$C${er}="T")*({hl}{dr}:{hl}{er}))'],
             [f'=IF({dl}5>0,{dl}3/{dl}5,0)'],

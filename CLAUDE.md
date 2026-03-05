@@ -78,11 +78,11 @@ Each date creates a **PAIR** of columns: HOURS (data) + DATE (formulas).
 
 ### Tip Distribution (Dynamic Split)
 The split depends on how many Team Members (T) have hours > 0 for that day:
+- **0 T members working:** 100% → E (Employees), 0% → T (Team Members)
 - **1 T member working:** 95% → E (Employees), 5% → T (Team Members)
 - **2+ T members working:** 90% → E (Employees), 10% → T (Team Members)
-- **0 T members working:** All tips go to E (T tip-per-hour is 0 since total T hours = 0)
 
-The split is implemented as Google Sheets `IF`/`COUNTIFS` formulas in each daily column (rows 3-4), so it recalculates automatically when employees submit or change hours.
+The split is implemented as nested Google Sheets `IF`/`COUNTIFS` formulas in each daily column (rows 3-4), so it recalculates automatically when employees submit or change hours.
 
 ## Critical Implementation Details
 
